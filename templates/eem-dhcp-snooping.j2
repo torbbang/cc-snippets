@@ -1,0 +1,44 @@
+{# 
+
+Configures the current egress interface towards the default gateway as trusted.
+Ensures that you never enable DHCP snooping without having a configured(and functioning) trusted interface.
+
+#}
+
+! @start-ignore-compliance
+event manager applet auto-snoop
+event timer countdown time 1
+
+{# Find default gateway address #}
+action 001 cli command "enable"
+action 002 cli command "show ip route 0.0.0.0 0.0.0.0 | i [0-9]*\.[0-9]*\.[0-9]*$"
+action 003 regexp "([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*)" "$_cli_result" match gateway
+
+{# Ensure MAC is in CAM #}
+action 100 syslog msg "Starting DHCP Snooping link-config"
+action 101 cli command "enable"
+action 102 set complete "false"
+action 103 while complete eq "false"
+ action 104 cli command "ping $gateway"
+ action 105 cli command "show ip arp | i $gateway"  
+ action 106 regexp "Incomplete" "$_cli_result"
+ action 107 if $_regexp_result eq "0"
+  action 108 set complete "true"
+  action 109 end
+ action 110 end
+
+{# Find "upstream" facing interface and configure it as trusted #}
+action 201 cli command "show ip arp | i $gateway"  
+action 202 regexp "( [0-9,a-f]*.[0-9,a-f]*\.[0-9,a-f]* )" "$_cli_result" match macaddr
+action 203 cli command "show mac address-table | i $macaddr"  
+action 204 regexp "([A-Z][a-z][a-z,A-Z,0-9,/]*)" "$_cli_result" match interface
+action 205 cli command "configure terminal"
+action 206 cli command "interface $interface"
+action 207 cli command "ip dhcp snooping trust"
+action 208 cli command "no event manager applet auto-snoop"
+action 209 cli command "do write"
+action 210 syslog msg "DHCP Snooping link-config complete"
+
+! @end-ignore-compliance
+ip dhcp snooping vlan 10, 20
+ip dhcp snooping

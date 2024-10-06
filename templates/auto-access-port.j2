@@ -1,0 +1,49 @@
+{# 
+
+Useful to automatically configure access-ports when onboarding devices.
+
+If you are provisioning this in a day-n template you should use the following flags at to avoid template compliance reporting
+! @start-ignore-compliance
+! @end-ignore-compliance
+
+#}
+
+event manager applet auto-access-port
+ event timer countdown time 10
+ action 000 cli command "enable"
+
+ {# Get all lines of show int desc containing physical interfaces #}
+ action 001 cli command "show int desc | i /"
+ action 002 foreach line "$_cli_result" "\n"
+
+  {# Capture port-name to $portname variable #}
+  action 003 regexp "([A-Z][a-z]*[0-9,/]+)" "$line" match portname
+
+  {# Verify that the port belongs to the main module/regular ports #}
+  action 004 regexp "0/[0-9]*" "$portname"
+  action 005 if $_regexp_result eq "1"
+
+   {# Configure first 8 ports in VLAN 10 #}
+   action 006 regexp ".*0/[1-8].*" "$portname"
+   action 007 if $_regexp_result eq "1"
+    action 008 cli command "configure terminal"
+    action 009 cli command "interface $portname"
+    action 010 cli command "description TO: IOT (VL10)" 
+    action 011 cli command "switchport access vlan 10"
+    action 012 cli command "switchport mode access"
+    action 013 cli command "switchport nonegotiate"
+   action 014 cli command "end"
+
+   {# Configure remaining ports in VLAN 20 #}
+   action 016 else
+	action 017 cli command "configure terminal"
+	action 018 cli command "interface $portname"
+	action 019 cli command "description TO: Employees (VL20)" 
+	action 020 cli command "switchport access vlan 20"
+	action 021 cli command "switchport mode access"
+	action 022 cli command "switchport nonegotiate"
+	action 023 cli command "end"
+   action 024 end
+
+  action 025 end
+ action 026 end

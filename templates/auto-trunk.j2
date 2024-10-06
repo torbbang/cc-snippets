@@ -1,0 +1,52 @@
+{# 
+
+Useful to automatically configure trunks when onboarding devices.
+
+Based on the templates from this community article:
+https://community.cisco.com/t5/networking-knowledge-base/automatically-set-port-descriptions/ta-p/3119769
+
+If you are provisioning this in a day-n template you should use the following flags at to avoid template compliance reporting
+! @start-ignore-compliance
+! @end-ignore-compliance
+
+#}
+
+event manager applet auto-trunk authorization bypass
+ {# Decided to use "update" as "add" turned out to not always be reliable #}
+ event neighbor-discovery interface regexp .* cdp update ratelimit 3
+
+ {# Configure ports for access points #}
+ action 01 regexp "(Trans-Bridge)" "$_nd_cdp_capabilities_string" 
+ action 02 if $_regexp_result eq "1"
+ action 03  regexp "^([^\.]+)" "$_nd_cdp_entry_name" match host
+ action 04  cli command "enable"
+ action 05  cli command "config t"
+ action 06  cli command "interface $_nd_local_intf_name"
+ action 07  cli command "description $host"
+ action 08  cli command "switchport mode trunk"
+ {# Replace with appropriate VLAN for your environment #}
+ action 09  cli command "switchport trunk native vlan 40" 
+ action 10  cli command "switchport nonegotiate"
+ action 11 end
+!
+{# Configure ports for routers and switches #}
+ action 12 regexp "(Switch|Router)" "$_nd_cdp_capabilities_string"
+ action 13 if $_regexp_result eq "1"
+ action 14  regexp "^([^\.]+)" "$_nd_cdp_entry_name" match host
+ action 15  cli command "enable"
+ action 16  cli command "config t"
+ action 17  cli command "interface $_nd_local_intf_name"
+ action 18  cli command "description TO: $host:$_nd_port_id" 
+ action 19  cli command "switchport mode trunk"
+ action 20  cli command "switchport nonegotiate"
+ action 21 end
+ action 22 exit
+!
+{# Cleanup applet #}
+event manager applet un-auto-trunk authorization bypass 
+ event timer countdown time 7200
+ action 00 cli command "enable"
+ action 01 cli command "config t"
+ action 02 cli command "no event manager applet auto-trunk"
+ action 03 cli command "no event manager applet un-auto-trunk"
+ action 04 cli command "do write"
